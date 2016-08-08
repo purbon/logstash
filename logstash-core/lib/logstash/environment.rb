@@ -40,6 +40,9 @@ module LogStash
             Setting::String.new("http.host", "127.0.0.1"),
               Setting::Port.new("http.port", 9600),
             Setting::String.new("http.environment", "production"),
+           Setting::Boolean.new("slow_log.pipeline", false),
+           Setting::Boolean.new("slow_log.plugin", false),
+            Setting::String.new("slow_log.dir", nil, false),
   ].each {|setting| SETTINGS.register(setting) }
 
   module Environment

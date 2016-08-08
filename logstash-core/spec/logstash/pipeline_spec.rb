@@ -397,9 +397,14 @@ describe LogStash::Pipeline do
     output { }
     CONFIG
 
-    it "uses a `NullMetric` object if `metric.collect` is set to false" do
-      settings = double("LogStash::SETTINGS")
+    let(:settings) { double("LogStash::SETTINGS") }
 
+    before(:each) do
+      allow(settings).to receive(:get).with("slow_log.plugin").and_return(false)
+      allow(settings).to receive(:get).with("slow_log.dir").and_return(nil)
+    end
+
+    it "uses a `NullMetric` object if `metric.collect` is set to false" do
       allow(settings).to receive(:get_value).with("pipeline.id").and_return("main")
       allow(settings).to receive(:get_value).with("metric.collect").and_return(false)
       allow(settings).to receive(:get_value).with("config.debug").and_return(false)

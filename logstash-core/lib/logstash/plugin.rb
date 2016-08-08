@@ -7,10 +7,11 @@ require "cabin"
 require "concurrent"
 require "securerandom"
 require "logstash/plugins/registry"
+require "logstash/logging/slow_log"
 
 class LogStash::Plugin
-  attr_accessor :params
-  attr_accessor :logger
+  attr_accessor :params, :logger
+  attr_reader   :settings
 
   NL = "\n"
 
@@ -45,9 +46,10 @@ class LogStash::Plugin
     self.class.name == other.class.name && @params == other.params
   end
 
-  def initialize(params=nil)
+  def initialize(params=nil, settings=LogStash::SETTINGS)
     @params = LogStash::Util.deep_clone(params)
     @logger = Cabin::Channel.get(LogStash)
+    @settings = settings
   end
 
   # Return a uniq ID for this plugin configuration, by default
@@ -114,6 +116,20 @@ class LogStash::Plugin
                          LogStash::Instrument::NullMetric.new
                        end
   end
+
+  def slow_logger=(slow_logger)
+    @slow_logger = slow_logger
+  end
+
+  def slow_logger
+    @slow_logger ||= LogStash::NullLog.new if @slow_logger.nil?
+    @slow_logger
+  end
+
+  def setting(key)
+    @settings.get_value(key)
+  end
+
   # return the configured name of this plugin
   # @return [String] The name of the plugin defined by `config_name`
   def config_name

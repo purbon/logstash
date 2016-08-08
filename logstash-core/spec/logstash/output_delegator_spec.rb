@@ -7,7 +7,7 @@ describe LogStash::OutputDelegator do
   let(:events) { 7.times.map { LogStash::Event.new }}
   let(:default_worker_count) { 1 }
 
-  subject { described_class.new(logger, out_klass, default_worker_count, LogStash::Instrument::NullMetric.new) }
+  subject { described_class.new(logger, out_klass, default_worker_count, LogStash::Instrument::NullMetric.new, LogStash::SlowLog.new) }
 
   context "with a plain output plugin" do
     let(:out_klass) { double("output klass") }
@@ -23,6 +23,7 @@ describe LogStash::OutputDelegator do
       allow(out_inst).to receive(:register)
       allow(out_inst).to receive(:multi_receive)
       allow(out_inst).to receive(:metric=).with(any_args)
+      allow(out_inst).to receive(:slow_logger=).with(any_args)
       allow(out_inst).to receive(:id).and_return("a-simple-plugin")
       allow(out_inst).to receive(:plugin_unique_name).and_return("hello-123")
       allow(logger).to receive(:debug).with(any_args)

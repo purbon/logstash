@@ -17,6 +17,7 @@ require "logstash/shutdown_watcher"
 require "logstash/patches/clamp"
 require "logstash/settings"
 require "logstash/version"
+require "logstash/logging/slow_log"
 
 class LogStash::Runner < Clamp::StrictCommand
   # The `path.settings` need to be defined in the runner instead of the `logstash-core/lib/logstash/environment.rb`
@@ -183,7 +184,7 @@ class LogStash::Runner < Clamp::StrictCommand
     end
 
     LogStash::ShutdownWatcher.unsafe_shutdown = setting("pipeline.unsafe_shutdown")
-    LogStash::ShutdownWatcher.logger = @logger
+    LogStash::ShutdownWatcher.logger = setting("slow_log.pipeline") ? @slow_logger : @logger
 
     configure_plugin_paths(setting("path.plugins"))
 
@@ -342,6 +343,12 @@ class LogStash::Runner < Clamp::StrictCommand
       @logger.warn("--config.debug was specified, but log.level was not set to \'debug\'! No config info will be logged.")
     end
 
+    params = {
+      :runner => self,
+      :enabled  => setting("slow_log.pipeline"),
+      :base_dir => setting("slow_log.dir")
+    }
+    @slow_logger = LogStash::SlowLogBuilder.build(params, LogStash::PipelineSlowLog)
     # TODO(sissel): redirect stdout/stderr to the log as well
     # http://jira.codehaus.org/browse/JRUBY-7003
   end # def configure_logging

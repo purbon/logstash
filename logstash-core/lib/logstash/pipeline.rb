@@ -18,6 +18,8 @@ require "logstash/instrument/null_metric"
 require "logstash/instrument/collector"
 require "logstash/output_delegator"
 require "logstash/filter_delegator"
+require "logstash/logging/slow_log"
+
 
 module LogStash; class Pipeline
   attr_reader :inputs,
@@ -29,6 +31,7 @@ module LogStash; class Pipeline
     :reporter,
     :pipeline_id,
     :logger,
+    :slow_logger,
     :started_at,
     :thread,
     :config_str,
@@ -44,15 +47,15 @@ module LogStash; class Pipeline
   ]
 
   def initialize(config_str, settings = LogStash::SETTINGS, namespaced_metric = nil)
-    @config_str = config_str
-    @logger = Cabin::Channel.get(LogStash)
-    @settings = settings
-    @pipeline_id = @settings.get_value("pipeline.id") || self.object_id
-    @reporter = LogStash::PipelineReporter.new(@logger, self)
+    @config_str  = config_str
+    configure_logging(settings)
 
-    @inputs = nil
-    @filters = nil
-    @outputs = nil
+    @settings    = settings
+    @pipeline_id = @settings.get_value("pipeline.id") || self.object_id
+    @reporter    = LogStash::PipelineReporter.new(@logger, self)
+    @inputs      = nil
+    @filters     = nil
+    @outputs     = nil
 
     @worker_threads = []
 
@@ -365,6 +368,7 @@ module LogStash; class Pipeline
     @logger.info "Closing inputs"
     @inputs.each(&:do_stop)
     @logger.info "Closed inputs"
+    close_slow_loggers
   end # def shutdown
 
   # After `shutdown` is called from an external thread this is called from the main thread to
@@ -394,14 +398,15 @@ module LogStash; class Pipeline
     klass = LogStash::Plugin.lookup(plugin_type, name)
 
     if plugin_type == "output"
-      LogStash::OutputDelegator.new(@logger, klass, @settings.get("pipeline.output.workers"), pipeline_scoped_metric.namespace(:outputs), *args)
+      LogStash::OutputDelegator.new(@logger, klass, @settings.get("pipeline.output.workers"), pipeline_scoped_metric.namespace(:outputs), slow_logger, *args)
     elsif plugin_type == "filter"
-      LogStash::FilterDelegator.new(@logger, klass, pipeline_scoped_metric.namespace(:filters), *args)
+      LogStash::FilterDelegator.new(@logger, klass, pipeline_scoped_metric.namespace(:filters), slow_logger, *args)
     else
       new_plugin = klass.new(*args)
       inputs_metric = pipeline_scoped_metric.namespace(:inputs)
       namespaced_metric = inputs_metric.namespace(new_plugin.plugin_unique_name.to_sym)
       new_plugin.metric = namespaced_metric
+      new_plugin.slow_logger = slow_logger
       new_plugin
     end
   end
@@ -493,6 +498,20 @@ module LogStash; class Pipeline
     (inputs + filters + outputs).select do |plugin|
       RELOAD_INCOMPATIBLE_PLUGINS.include?(plugin.class.name)
     end
+  end
+
+  def configure_logging(settings)
+    @logger      = Cabin::Channel.get(LogStash)
+    params = {
+      :pipeline => self,
+      :enabled  => settings.get("slow_log.plugin"),
+      :base_dir => settings.get("slow_log.dir")
+    }
+    @slow_logger = SlowLogBuilder.build(params, LogStash::PluginsSlowLog)
+  end
+
+  def close_slow_loggers
+    slow_logger.close
   end
 
   # Sometimes we log stuff that will dump the pipeline which may contain

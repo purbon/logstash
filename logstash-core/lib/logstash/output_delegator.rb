@@ -13,7 +13,7 @@ module LogStash class OutputDelegator
 
   # The *args this takes are the same format that a Outputs::Base takes. A list of hashes with parameters in them
   # Internally these just get merged together into a single hash
-  def initialize(logger, klass, default_worker_count, metric, *plugin_args)
+  def initialize(logger, klass, default_worker_count, metric, slow_logger, *plugin_args)
     @logger = logger
     @threadsafe = klass.threadsafe?
     @config = plugin_args.reduce({}, :merge)
@@ -26,8 +26,9 @@ module LogStash class OutputDelegator
     output = @klass.new(@config)
 
     # Scope the metrics to the plugin
-    namespaced_metric = metric.namespace(output.plugin_unique_name.to_sym)
-    output.metric = namespaced_metric
+    namespaced_metric  = metric.namespace(output.plugin_unique_name.to_sym)
+    output.metric      = namespaced_metric
+    output.slow_logger = slow_logger
 
     @metric_events = namespaced_metric.namespace(:events)
     namespaced_metric.gauge(:name, config_name)

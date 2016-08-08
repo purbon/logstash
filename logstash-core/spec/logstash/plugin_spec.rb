@@ -271,7 +271,6 @@ describe LogStash::Plugin do
     end
   end
 
-
   context "When the plugin record a metric" do
     let(:config) { {} }
 
@@ -339,6 +338,80 @@ describe LogStash::Plugin do
           it "should use a `NullMetric`" do
             expect(subject.metric).to be_kind_of(LogStash::Instrument::NullMetric)
           end
+        end
+      end
+    end
+  end
+
+  context "When the plugin report an slow operation" do
+
+    let(:config) { {} }
+
+    [LogStash::Inputs::Base, LogStash::Filters::Base, LogStash::Outputs::Base].each do |base|
+      let(:plugin) do
+        Class.new(base) do
+          config_name "test"
+          def register; end
+        end
+      end
+
+      subject { plugin.new(config) }
+
+      context "When no logger is set" do
+
+        it "should use the null Logger" do
+          expect(subject.slow_logger).to be_kind_of(LogStash::NullLog)
+        end
+
+        it "should accept logging messages without errors" do
+          expect { subject.slow_logger.log("this is slowish", :action => "test") }.not_to raise_error
+        end
+      end
+
+      context "When an slow_logger is configured" do
+
+        let(:params)      { {:base_dir => nil} }
+        let(:slow_logger) { LogStash::SlowLogBuilder.build(params, LogStash::PluginsSlowLog) }
+        let(:logger)      { double("Logger") }
+
+        before(:each) do
+          ##
+          # Setting up the mock Logger, so we can test the implementation, but
+          # not polute the console when running the tests
+          ##
+          allow(logger).to   receive(:level=).with(:warn)
+          allow(logger).to   receive(:warn)
+          allow(slow_logger).to receive(:logger).and_return(logger)
+          subject.slow_logger = slow_logger
+        end
+
+        it "should use the SlowLog Logger" do
+          expect(subject.slow_logger).to be_kind_of(LogStash::SlowLog)
+          expect(subject.slow_logger).to be_kind_of(LogStash::PluginsSlowLog)
+        end
+
+        it "should accept logging request without errors" do
+          expect { subject.slow_logger.log("this is slow", :action => "test") }.not_to raise_error
+        end
+
+        it "should use the warn log level" do
+          expect(logger).to receive(:warn).with(:action => "test")
+          subject.slow_logger.log(:action => "test")
+        end
+      end
+
+      context "When accessing current settings" do
+
+        let(:settings) { double("LogStash::SETTINGS") }
+
+        it "should fetch existing settings without errors" do
+          expect { subject.setting("path.data") }.not_to raise_error
+        end
+
+        it "should retrieve the current value, either default or set" do
+          allow(settings).to receive(:get_value).with("plugins.grok.slow_filter_in_sec").and_return(60)
+          subject = plugin.new(config, settings)
+          expect(subject.setting("plugins.grok.slow_filter_in_sec")).to eq(60)
         end
       end
     end
